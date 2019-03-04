@@ -1,0 +1,51 @@
+{
+  "name": "jallaify",
+  "version": "1.0.0",
+  "description": "Browserify plugin for bundling applications built with jalla",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test | tap-format-spec",
+    "posttest": "standard"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jallajs/jallaify.git"
+  },
+  "keywords": [
+    "choo",
+    "jalla",
+    "browserify",
+    "browserify-plugin"
+  ],
+  "author": "code and conspire",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jallajs/jallaify/issues"
+  },
+  "homepage": "https://github.com/jallajs/jallaify#readme",
+  "peerDependencies": {
+    "jalla": "0.x"
+  },
+  "devDependencies": {
+    "@tap-format/spec": "^0.2.0",
+    "choo": "^6.13.1",
+    "concat-stream": "^2.0.0",
+    "jalla": "^0.12.0-6",
+    "standard": "^12.0.1",
+    "tape": "^4.10.1"
+  },
+  "dependencies": {
+    "@babel/core": "^7.3.4",
+    "@babel/preset-env": "^7.3.4",
+    "acorn": "^6.1.1",
+    "babel-plugin-dynamic-import-split-require": "^2.0.0",
+    "babelify": "^10.0.0",
+    "brfs": "^2.0.2",
+    "browserify": "^16.2.3",
+    "convert-source-map": "^1.6.0",
+    "split-require": "^3.1.2",
+    "static-eval": "^2.0.2",
+    "through2": "^3.0.1",
+    "transform-ast": "^2.4.4"
+  }
+}
