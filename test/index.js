@@ -6,14 +6,22 @@ var concat = require('concat-stream')
 var browserify = require('browserify')
 var plugin = require('..')
 
-var basedir = path.resolve(__dirname, 'fixtures')
+test('plugin throws on missing standalone', function (t) {
+  t.plan(1)
+  var entry = path.resolve(__dirname, 'fixtures/entry.js')
+  var b = browserify(entry, { node: true })
+  b.on('error', t.pass)
+  b.plugin(plugin)
+  b.bundle()
+})
 
 test('bundle', function (t) {
-  t.plan(3)
+  t.plan(4)
   var entry = path.resolve(__dirname, 'fixtures/entry.js')
   var b = browserify(entry, { node: true, standalone: 'test' })
   b.on('error', t.fail)
   b.plugin(plugin, { foo: 'bar' })
+  b.on('jalla.entry', () => t.pass('emit entry file'))
   b.bundle().pipe(concat(function (buf) {
     var res = buf.toString()
     var entry = path.resolve(__dirname, 'fixtures/index.js')
@@ -26,9 +34,10 @@ test('bundle', function (t) {
 test('transform throws on explicit falsy serve', function (t) {
   t.plan(1)
   var stream = withOptions('{ serve: false }')
-  var b = browserify(stream, { node: true, standalone: 'test', basedir })
+  var b = browserify(stream, { node: true, standalone: 'test' })
+  b.on('error', t.fail)
   b.plugin(plugin)
-  b.bundle().on('error', (err) => t.pass(err.message))
+  b.bundle().on('error', t.pass)
 })
 
 test('transform option: missing', function (t) {
@@ -46,7 +55,7 @@ test('transform option: missing', function (t) {
 test('transform option: static', function (t) {
   t.plan(1)
   var stream = withOptions('OPTIONS')
-  var b = browserify(stream, { node: true, standalone: 'test', basedir })
+  var b = browserify(stream, { node: true, standalone: 'test' })
   b.on('error', t.fail)
   b.plugin(plugin)
   b.bundle().pipe(concat(function (buf) {
@@ -58,7 +67,7 @@ test('transform option: static', function (t) {
 test('transform option: dynamic', function (t) {
   t.plan(1)
   var stream = withOptions('GET_OPTIONS()')
-  var b = browserify(stream, { node: true, standalone: 'test', basedir })
+  var b = browserify(stream, { node: true, standalone: 'test' })
   b.on('error', t.fail)
   b.plugin(plugin)
   b.bundle().pipe(concat(function (buf) {
@@ -70,7 +79,7 @@ test('transform option: dynamic', function (t) {
 test('transform option: unresolvable expression', function (t) {
   t.plan(1)
   var stream = withOptions('{ serve: FOO === "bar" }')
-  var b = browserify(stream, { node: true, standalone: 'test', basedir })
+  var b = browserify(stream, { node: true, standalone: 'test' })
   b.on('error', t.fail)
   b.plugin(plugin)
   b.bundle().pipe(concat(function (buf) {
@@ -82,7 +91,7 @@ test('transform option: unresolvable expression', function (t) {
 test('transform option: resolvable expression', function (t) {
   t.plan(1)
   var stream = withOptions('{ serve: 1 + 1 === 2 }')
-  var b = browserify(stream, { node: true, standalone: 'test', basedir })
+  var b = browserify(stream, { node: true, standalone: 'test' })
   b.on('error', t.fail)
   b.plugin(plugin)
   b.bundle().pipe(concat(function (buf) {

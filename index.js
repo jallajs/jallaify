@@ -34,109 +34,114 @@ function plugin (b, opts) {
     ]
   })
   b.transform(brfs)
-  b.transform(transform, { options: opts || {} })
+  b.transform(createTransform(b, opts))
 }
 
-function transform (file, opts) {
-  if (/\.json$/.test(file)) return through()
+function createTransform (b, opts) {
+  return function transform (file) {
+    if (/\.json$/.test(file)) return through()
 
-  var source = ''
-  var variables = []
+    var source = ''
+    var variables = []
 
-  return through(write, end)
+    return through(write, end)
 
-  function write (chunk, enc, cb) {
-    source += chunk
-    cb()
-  }
-
-  function end (cb) {
-    if (this.listenerCount('dep') === 0) {
-      throw new Error('jallaify: requires browserify v16 or up')
+    function write (chunk, enc, cb) {
+      source += chunk
+      cb()
     }
 
-    var self = this
-    var flags = (opts && opts._flags) || {}
-    var basedir = flags.basedir || process.cwd()
-    var filename = path.relative(basedir, file)
-
-    if (!source.includes('jalla')) {
-      cb(null, source)
-      return
-    }
-
-    var res
-    try {
-      res = transformAst(source, { parser: acorn, inputFilename: filename }, walk)
-      if (flags.debug) {
-        var sm = convertSourceMap.fromObject(res.map).toComment()
-        res = res.toString() + '\n' + sm + '\n'
-      } else {
-        res = res.toString()
-      }
-    } catch (err) {
-      return cb(err)
-    }
-    this.push(res)
-    this.push(null)
-
-    function walk (node) {
-      if (requiresJalla(node) && node.parent.type === 'VariableDeclarator') {
-        variables.push(node.parent.id.name)
+    function end (cb) {
+      if (this.listenerCount('dep') === 0) {
+        throw new Error('jallaify: requires browserify v16 or up')
       }
 
-      if (node.type === 'CallExpression' &&
-        node.callee.type === 'Identifier' &&
-        variables.includes(node.callee.name) &&
-        node.arguments.length &&
-        node.arguments[0].type === 'Literal') {
-        let [first, second] = node.arguments
-        let entry = path.resolve(path.dirname(file), first.value)
+      var self = this
+      var flags = (opts && opts._flags) || {}
+      var basedir = flags.basedir || process.cwd()
+      var filename = path.relative(basedir, file)
 
-        let serveEnabled = false
-        let resolvedServe = false
-        let hasServeOption = false
-        if (second && second.type === 'ObjectExpression') {
-          for (let i = 0, len = second.properties.length; i < len; i++) {
-            let key = second.properties[i].key.name
-            let value = second.properties[i].value
+      if (!source.includes('jalla')) {
+        cb(null, source)
+        return
+      }
 
-            if (key === 'serve') {
-              hasServeOption = true
-              let type = second.properties[i].value.type
-              if (type === 'Literal') {
-                // interpret literal serve option
-                serveEnabled = Boolean(value.value)
-                resolvedServe = true
-              } else if (type === 'BinaryExpression') {
-                // try and evaluate the serve option
-                let ast = acorn.parse(value.getSource()).body[0].expression
-                serveEnabled = evaluate(ast)
-                resolvedServe = typeof serveEnabled !== 'undefined'
+      var res
+      try {
+        res = transformAst(source, { parser: acorn, inputFilename: filename }, walk)
+        if (flags.debug) {
+          var sm = convertSourceMap.fromObject(res.map).toComment()
+          res = res.toString() + '\n' + sm + '\n'
+        } else {
+          res = res.toString()
+        }
+      } catch (err) {
+        return cb(err)
+      }
+      this.push(res)
+      this.push(null)
+
+      function walk (node) {
+        if (requiresJalla(node) && node.parent.type === 'VariableDeclarator') {
+          variables.push(node.parent.id.name)
+        }
+
+        if (node.type === 'CallExpression' &&
+          node.callee.type === 'Identifier' &&
+          variables.includes(node.callee.name) &&
+          node.arguments.length &&
+          node.arguments[0].type === 'Literal') {
+          let [first, second] = node.arguments
+          let entry = path.resolve(path.dirname(file), first.value)
+
+          // emit identified entry file
+          b.emit('jalla.entry', entry)
+
+          let serveEnabled = false
+          let resolvedServe = false
+          let hasServeOption = false
+          if (second && second.type === 'ObjectExpression') {
+            for (let i = 0, len = second.properties.length; i < len; i++) {
+              let key = second.properties[i].key.name
+              let value = second.properties[i].value
+
+              if (key === 'serve') {
+                hasServeOption = true
+                let type = second.properties[i].value.type
+                if (type === 'Literal') {
+                  // interpret literal serve option
+                  serveEnabled = Boolean(value.value)
+                  resolvedServe = true
+                } else if (type === 'BinaryExpression') {
+                  // try and evaluate the serve option
+                  let ast = acorn.parse(value.getSource()).body[0].expression
+                  serveEnabled = evaluate(ast)
+                  resolvedServe = typeof serveEnabled !== 'undefined'
+                }
               }
+            }
+
+            if (hasServeOption && resolvedServe && !serveEnabled) {
+              self.emit('error', Error('jallaify: serve option should be truthy'))
             }
           }
 
-          if (hasServeOption && resolvedServe && !serveEnabled) {
-            self.emit('error', Error('jallaify: serve option should be truthy'))
+          let options = opts
+          if (second) {
+            if (!hasServeOption) options = Object.assign({ serve: true }, options)
+            options = `Object.assign(${JSON.stringify(options)}, ${second.getSource()})`
+          } else {
+            options = JSON.stringify(Object.assign({ serve: true }, options))
           }
-        }
 
-        let options = opts.options
-        if (second) {
-          if (!hasServeOption) options = Object.assign({ serve: true }, options)
-          options = `Object.assign(${JSON.stringify(options)}, ${second.getSource()})`
-        } else {
-          options = JSON.stringify(Object.assign({ serve: true }, options))
+          if (second) {
+            first.update(`"${entry}"`)
+            second.update(options)
+          } else {
+            node.edit.update(`${node.callee.name}("${entry}", ${options})`)
+          }
+          self.emit('dep', entry)
         }
-
-        if (second) {
-          first.update(`"${entry}"`)
-          second.update(options)
-        } else {
-          node.edit.update(`${node.callee.name}("${entry}", ${options})`)
-        }
-        self.emit('dep', entry)
       }
     }
   }
